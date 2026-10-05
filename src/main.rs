@@ -3,25 +3,43 @@ mod expr;
 mod parser;
 
 use lexer::tokenization;
-use expr::{calculate};
-use parser::Parser;
+use expr::calculate;
+use parser::{PrattParser, RecursiveDescentParser};
 
 fn main() {
-    // 演示：解析和计算 (1.5+2.5)+3.0 的结果
-    let input = "(1.5+2.5)+3.0";
-    println!("📝 输入表达式：{}", input);
+    let cases = [
+        "(1.5+2.5)+3.0", 
+        "1+2*3",         // 乘除优先于加减 → 7
+        "(1+2)*3",       // 括号改变优先级 → 9
+        "10-4-3",        // 左结合 → 3
+        "2*(3+4)/7",     // 混合嵌套 → 2
+    ];
 
-    // 1. 词法分析（Tokenization）：将字符串转换为Token流
-    let tokens = tokenization(input);
-    println!("🔤 Token流：{:?}", tokens);
+    for input in cases {
+        println!("输入表达式：{}", input);
 
-    // 2. 语法分析（Parsing）：使用Pratt算法解析Token流为表达式树
-    let mut parser = Parser::new(tokens);
-    let expr = parser.parse();
-    println!("🌳 表达式树：{:?}", expr);
+        // 1. 词法分析
+        let tokens = tokenization(input);
+        println!("  Token流：{:?}", tokens);
 
-    // 3. 计算（Evaluation）：递归计算表达式树的结果
-    let result = calculate(expr);
-    println!("✅ 计算结果：{}", result);
-    println!("\n(1.5+2.5)+3.0 = {}", result);
+        // 2a. Pratt 解析
+        let mut pratt = PrattParser::new(tokens.clone());
+        let pratt_expr = pratt.parse();
+        let pratt_result = calculate(pratt_expr);
+
+        // 2b. 递归下降解析
+        let mut rd = RecursiveDescentParser::new(tokens);
+        let rd_expr = rd.parse();
+        let rd_result = calculate(rd_expr);
+
+        // 3. 对照两种实现的结果
+        println!("  Pratt      结果：{}", pratt_result);
+        println!("  递归下降   结果：{}", rd_result);
+        assert_eq!(
+            pratt_result, rd_result,
+            "两种实现对 `{}` 的求值结果不一致",
+            input
+        );
+        println!("  结果一致 ✓\n");
+    }
 }

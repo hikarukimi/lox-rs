@@ -1,16 +1,20 @@
 use crate::lexer::{Token, TokenKind};
 use crate::expr::Expression;
 
-/// Parser结构体，用于使用Pratt解析算法解析Token流
-pub struct Parser {
+// ============================================================================
+// 实现一：Pratt 解析（自上而下算符优先解析）
+// ============================================================================
+
+/// PrattParser，使用Pratt解析算法解析Token流
+pub struct PrattParser {
     /// Token流
     tokens: Vec<Token>,
     /// 当前指向的Token索引
     current: usize,
 }
 
-impl Parser {
-    /// 创建一个新的Parser实例
+impl PrattParser {
+    /// 创建一个新的PrattParser实例
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens,
@@ -107,5 +111,159 @@ impl Parser {
     pub fn parse(&mut self) -> Expression {
         // 以最低的结合力(RBP = 0)开始表达式解析
         self.parse_expression(0)
+    }
+}
+
+// ============================================================================
+// 实现二：递归下降解析（基于 BNF 文法）
+// ============================================================================
+//
+// 表达式文法（每层优先级对应一个非终结符，while 循环保证左结合）：
+//
+// ```bnf
+// expression := term ( ("+" | "-") term )*
+// term       := factor ( ("*" | "/") factor )*
+// factor     := NUMBER | FLOAT | "(" expression ")"
+// ```
+//
+// 每条 BNF 规则直接映射为一个解析方法。
+
+/// RecursiveDescentParser，使用递归下降算法解析Token流
+pub struct RecursiveDescentParser {
+    /// Token流
+    tokens: Vec<Token>,
+    /// 当前指向的Token索引
+    current: usize,
+}
+
+impl RecursiveDescentParser {
+    /// 创建一个新的RecursiveDescentParser实例
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self {
+            tokens,
+            current: 0,
+        }
+    }
+
+    /// 查看当前Token，不消费它
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.current)
+    }
+
+    /// 消费当前Token并前进
+    fn advance(&mut self) -> Option<&Token> {
+        let token = self.tokens.get(self.current);
+        if token.is_some() {
+            self.current += 1;
+        }
+        token
+    }
+
+    /// 检查当前Token的kind是否与期望的一致（不消费）
+    fn check(&self, expected: &TokenKind) -> bool {
+        match self.peek() {
+            Some(token) => std::mem::discriminant(&token.kind)
+                == std::mem::discriminant(expected),
+            None => false,
+        }
+    }
+
+    /// 如果当前Token匹配给定kind之一，则消费并返回它；否则返回None
+    fn match_kind(&mut self, kinds: &[TokenKind]) -> Option<Token> {
+        if kinds.iter().any(|k| self.check(k)) {
+            Some(self.advance().unwrap().clone())
+        } else {
+            None
+        }
+    }
+
+    /// 断言当前Token为期望的kind，消费并返回它；否则panic
+    fn expect(&mut self, expected: &TokenKind, msg: &str) -> Token {
+        match self.advance() {
+            Some(token) if std::mem::discriminant(&token.kind)
+                == std::mem::discriminant(expected) =>
+            {
+                token.clone()
+            }
+            other => panic!("{}，实际找到：{:?}", msg, other),
+        }
+    }
+
+    /// expression := term ( ("+" | "-") term )*
+    ///
+    /// 解析加减运算。用while循环持续消费 +/-，每次把已解析的左半部分
+    /// 包进新的Binary节点，从而实现左结合。
+    fn parse_expression(&mut self) -> Expression {
+        let mut left = self.parse_term();
+
+        while let Some(op) = self.match_kind(&[TokenKind::Plus, TokenKind::Minus]) {
+            let right = self.parse_term();
+            left = Expression::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        }
+
+        left
+    }
+
+    /// term := factor ( ("*" | "/") factor )*
+    ///
+    /// 解析乘除运算，优先级高于加减。
+    fn parse_term(&mut self) -> Expression {
+        let mut left = self.parse_factor();
+
+        while let Some(op) = self.match_kind(&[TokenKind::Mul, TokenKind::Div]) {
+            let right = self.parse_factor();
+            left = Expression::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        }
+
+        left
+    }
+
+    /// factor := NUMBER | FLOAT | "(" expression ")"
+    ///
+    /// 解析原子表达式：数字字面量或括号分组。
+    fn parse_factor(&mut self) -> Expression {
+        let token = self
+            .advance()
+            .expect("意外的文件结束：期望一个数字或左括号");
+
+        match &token.kind {
+            TokenKind::Number(value) => Expression::IntLiteral(*value),
+            TokenKind::Float(value) => Expression::FloatLiteral(*value),
+            TokenKind::LeftParen => {
+                let left_paren = token.clone();
+                // 括号内部是一个完整的子表达式，重新从最低优先级开始解析
+                let inner = self.parse_expression();
+                let right_paren =
+                    self.expect(&TokenKind::RightParen, "期望右括号 `)`");
+                Expression::Grouping {
+                    left_paren,
+                    expr: Box::new(inner),
+                    right_paren,
+                }
+            }
+            _ => panic!("期望一个数字或左括号，找到：{:?}", token),
+        }
+    }
+
+    /// 解析整个Token流的入口点
+    ///
+    /// ### Panics
+    /// 当表达式解析完后仍有残留Token时panic
+    pub fn parse(&mut self) -> Expression {
+        let expr = self.parse_expression();
+
+        if let Some(rest) = self.peek() {
+            panic!("表达式结束后存在多余Token：{:?}", rest);
+        }
+
+        expr
     }
 }
