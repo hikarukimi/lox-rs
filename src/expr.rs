@@ -9,6 +9,12 @@ pub enum Expression {
     /// 浮点数字面量
     FloatLiteral(f64),
 
+    /// 布尔字面量
+    BooleanLiteral(bool),
+
+    /// 字符串字面量
+    StringLiteral(String),
+
     Grouping{
         left_paren: Token,
         expr:Box<Expression>,
@@ -35,6 +41,8 @@ impl Expression {
         match self {
             Expression::IntLiteral(num) => num.to_string(),
             Expression::FloatLiteral(num) => num.to_string(),
+            Expression::BooleanLiteral(b) => b.to_string(),
+            Expression::StringLiteral(s) => format!("\"{}\"", s),
             Expression::Grouping{left_paren, expr, right_paren} => format!("({}{}{})", left_paren, expr.parenthesize(), right_paren),
             Expression::Unary { op, right } => format!("({}{})", op, right.parenthesize()),
             Expression::Binary { left, op, right } => format!("({}{}{})", left.parenthesize(), op, right.parenthesize()),

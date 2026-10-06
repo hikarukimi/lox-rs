@@ -130,6 +130,8 @@ impl Token {
 /// 将标识符字符串转换为相应的Token类型（关键字或标识符）
 fn identifier_to_token(ident: &str, line: usize) -> Token {
     let kind = match ident {
+        "true" => TokenKind::Boolean(true),
+        "false" => TokenKind::Boolean(false),
         "if" => TokenKind::If,
         "else" => TokenKind::Else,
         "while" => TokenKind::While,

@@ -125,7 +125,7 @@ impl PrattParser {
 // term       := factor ( ("*" | "/") factor )*
 // factor     := unary
 // unary      := "-" unary | primary
-// primary    := NUMBER | FLOAT | "(" expression ")"
+// primary    := NUMBER | FLOAT | BOOLEAN | STRING | "(" expression ")"
 // ```
 //
 // 每条 BNF 规则直接映射为一个解析方法。
@@ -251,17 +251,19 @@ impl RecursiveDescentParser {
         }
     }
 
-    /// primary := NUMBER | FLOAT | "(" expression ")"
+    /// primary := NUMBER | FLOAT | BOOLEAN | STRING | "(" expression ")"
     ///
-    /// 解析原子表达式：数字字面量或括号分组。
+    /// 解析原子表达式：字面量（数字/布尔/字符串）或括号分组。
     fn parse_primary(&mut self) -> Expression {
         let token = self
             .advance()
-            .expect("意外的文件结束：期望一个数字或左括号");
+            .expect("意外的文件结束：期望一个字面量或左括号");
 
         match &token.kind {
             TokenKind::Number(value) => Expression::IntLiteral(*value),
             TokenKind::Float(value) => Expression::FloatLiteral(*value),
+            TokenKind::Boolean(value) => Expression::BooleanLiteral(*value),
+            TokenKind::String(value) => Expression::StringLiteral(value.clone()),
             TokenKind::LeftParen => {
                 let left_paren = token.clone();
                 // 括号内部是一个完整的子表达式，重新从最低优先级开始解析
@@ -274,7 +276,7 @@ impl RecursiveDescentParser {
                     right_paren,
                 }
             }
-            _ => panic!("期望一个数字或左括号，找到：{:?}", token),
+            _ => panic!("期望一个字面量或左括号，找到：{:?}", token),
         }
     }
 
