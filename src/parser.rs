@@ -123,7 +123,9 @@ impl PrattParser {
 // ```bnf
 // expression := term ( ("+" | "-") term )*
 // term       := factor ( ("*" | "/") factor )*
-// factor     := NUMBER | FLOAT | "(" expression ")"
+// factor     := unary
+// unary      := "-" unary | primary
+// primary    := NUMBER | FLOAT | "(" expression ")"
 // ```
 //
 // 每条 BNF 规则直接映射为一个解析方法。
@@ -226,10 +228,33 @@ impl RecursiveDescentParser {
         left
     }
 
-    /// factor := NUMBER | FLOAT | "(" expression ")"
+    /// factor := unary
+    fn parse_factor(&mut self) -> Expression {
+        self.parse_unary()
+    }
+
+    /// unary := "-" unary | primary
+    ///
+    /// 解析一元负号（右结合，递归调用自身），如 `-(3+4)`。
+    /// 注意：lexer 会把紧贴数字的负号折叠进字面量（如 `-5` 直接是 Number(-5)），
+    /// 因此这里主要处理负号作用于括号表达式等情况。
+    fn parse_unary(&mut self) -> Expression {
+        if self.check(&TokenKind::Minus) {
+            let op = self.advance().unwrap().clone();
+            let right = self.parse_unary();
+            Expression::Unary {
+                op,
+                right: Box::new(right),
+            }
+        } else {
+            self.parse_primary()
+        }
+    }
+
+    /// primary := NUMBER | FLOAT | "(" expression ")"
     ///
     /// 解析原子表达式：数字字面量或括号分组。
-    fn parse_factor(&mut self) -> Expression {
+    fn parse_primary(&mut self) -> Expression {
         let token = self
             .advance()
             .expect("意外的文件结束：期望一个数字或左括号");
